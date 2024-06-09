@@ -3,15 +3,18 @@ const Chatbot = require('../../models/Chatbot');
 const router = express.Router();
 const multer = require('multer');
 const AWS = require('aws-sdk');
-
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const mongoose = require('mongoose');
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
 
 AWS.config.update({
     accessKeyId: process.env.S3_ACCESS_KEY_ID,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
     region: process.env.S3_REGION,
 });
+const s3 = new AWS.S3();
 
 router.post('/chatbotconfig', upload.single('image'), async (req, res) => {
     const {
@@ -36,7 +39,7 @@ router.post('/chatbotconfig', upload.single('image'), async (req, res) => {
             if (iconPosition !== undefined) chatbot.iconPosition = iconPosition;
             if (distanceFromBottom !== undefined) chatbot.distanceFromBottom = distanceFromBottom;
             if (horizontalDistance !== undefined) chatbot.horizontalDistance = horizontalDistance;
-            if (imageUrl !== undefined) chatbot.image = imageUrl;
+            // if (imageUrl !== undefined) chatbot.image = imageUrl;
         } else {
             chatbot = new Chatbot({
                 project,
@@ -65,27 +68,45 @@ router.post('/chatbotconfig', upload.single('image'), async (req, res) => {
 
 
 router.post('/uploadImage', upload.single('image'), async (req, res) => {
-
     try {
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
-        }
+      const { id } = req.body;
+      if (!id) {
+        return res.status(400).json({ message: 'No ID provided' });
+      }
+  
+    //   console.log('Received ID:', id); 
+      const findproject = await Chatbot.findOne({ project: id });
+      if (!findproject) {
+        return res.status(404).json({ message: 'Project not found' });
+      }
+  
+    //   console.log(findproject);
+  
+      if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded' });
+      }
+  
+      const params = {
+        Bucket: "lama-pics",
+        Key: `bot/${Date.now()}_${req.file.originalname}`,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype,
+      };
+  
+      const s3Response = await s3.upload(params).promise();
+      const imageUrl = s3Response.Location;
+      console.log(imageUrl);
+  
 
-        const s3 = new AWS.S3();
-        const params = {
-            Bucket: "lama-pics",
-            Key: `bot/${Date.now()}_${req.file.originalname}`,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
-        };
-        const s3Response = await s3.upload(params).promise();
-        const imageUrl = s3Response.Location;
-        res.status(200).json({ imageUrl });
+      findproject.imageUrl = imageUrl;
+      await findproject.save();
+  
+      res.status(200).json({ imageUrl });
     } catch (error) {
-        res.status(500).json({ message: error.message });
-        console.error('Image upload error:', error.message);
+      res.status(500).json({ message: error.message });
+      console.error('Image upload error:', error.message);
     }
-});
+  });
 
 
 
@@ -104,5 +125,16 @@ router.get('/checkvalues/:id', async (req,res)=>{
     }
 })
 
+
+router.get('/allchatbot', async(req,res)=>{
+    try {
+        const bots =await  Chatbot.find()
+        res.json(bots)
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+        console.error(error.message);
+    }
+
+})
 
 module.exports = router;

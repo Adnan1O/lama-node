@@ -86,13 +86,13 @@ router.get('/getProjectFiles/:id', async (req,res)=>{
         }
         const files = project.files.map(file => ({
             ...file.toObject(),
-            dateAdded: new Date(file.dateAdded).toLocaleString() // Formatting the date
+            dateAdded: new Date(file.dateAdded).toLocaleString() 
         }));
         if (!project) {
             return res.status(404).json('no file uploaded yet')
          }
-         console.log(files)
-         res.status(200).json(files)
+         const reversedFiles = files.reverse();
+         res.status(200).json(reversedFiles)
     } catch (error) {
         console.error(error.message);
         res.status(500).json({ message: 'Something went wrong' });
@@ -122,6 +122,57 @@ router.delete('/deleteFile/:projectId/:id', async (req,res)=>{
         res.status(500).json({ message: 'Something went wrong' });
     }
 })
+
+
+router.get('/GetTranscript/:projectId/:fileId', async (req, res) => {
+    try {
+        const { projectId, fileId } = req.params;
+        console.log('projectId:', projectId, 'fileId:', fileId);
+        
+        const project = await Project.findById(fileId);
+        console.log(project)
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        const file = project.files.find(file => file._id.toString() === projectId);
+        console.log(file)
+        if (!file) {
+            console.log("File not found");
+            return res.status(404).json({ message: 'File not found' });
+        }
+
+        res.status(200).json(file);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+router.post('/updateScript', async (req, res) => {
+    try {
+        const { projectId, fileId, script } = req.body;
+        console.log( projectId, fileId, script)
+        const project = await Project.findById(fileId);
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found' });
+        }
+
+        const file = project.files.find(file => file._id.toString() === projectId);
+        if (!file) {
+            return res.status(404).json({ message: 'File not found' });
+        }
+        console.log(file)
+        file.description = script;
+        await project.save();
+        res.status(200).json({ message: 'Script updated successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 
 
 module.exports = router;
